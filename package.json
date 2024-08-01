@@ -1,11 +1,11 @@
 {
-  "name": "bing-translate-api",
-  "version": "4.0.2",
+  "name": "@gareth/bing-translate-api",
+  "version": "5.0.0",
   "description": "A simple and free API for Bing & Microsoft Translator for Node.js",
   "main": "src/index.js",
   "typings": "index.d.ts",
   "scripts": {
-    "test": "node test/index.js && node test/lang.js && node test/met.js",
+    "test": "node test/index.js && node test/lang.js",
     "gen:config": "node scripts/generate-config.js"
   },
   "keywords": [
@@ -24,18 +24,18 @@
     "test",
     "index.d.ts"
   ],
-  "author": "plainheart",
+  "author": "garethng",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/plainheart/bing-translate-api.git"
+    "url": "git+https://github.com/garethng/bing-translate-api.git"
   },
   "bugs": {
-    "url": "https://github.com/plainheart/bing-translate-api/issues"
+    "url": "https://github.com/garethng/bing-translate-api/issues"
   },
-  "homepage": "https://github.com/plainheart/bing-translate-api#readme",
+  "homepage": "https://github.com/garethng/bing-translate-api#readme",
   "dependencies": {
-    "got": "^11.8.6"
+    "node-fetch": "^2.6.1"
   },
   "devDependencies": {
     "cheerio": "^1.0.0-rc.12"

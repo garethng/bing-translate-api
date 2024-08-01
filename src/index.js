@@ -23,7 +23,7 @@
 /**
  * @type {Got}
  */
-const got = require('got')
+const fetch = require("node-fetch")
 
 const lang = require('./lang')
 const config = require('./config.json')
@@ -69,36 +69,39 @@ function isTokenExpired() {
  *
  * @returns {Promise<GlobalConfig>}
  */
-async function fetchGlobalConfig(userAgent, proxyAgents) {
-  // use last subdomain if exists
-  let subdomain = globalConfig && globalConfig.subdomain
+async function fetchGlobalConfig(userAgent) {
+  let subdomain = globalConfig && globalConfig.subdomain;
 
   try {
-    const { body, request: { redirects: [redirectUrl] } } = await got(
-      replaceSubdomain(TRANSLATE_WEBSITE, subdomain),
-      {
-        headers: {
-          'user-agent': userAgent || config.userAgent
-        },
-        agent: proxyAgents,
-        retry: {
-          limit: MAX_RETRY_COUNT,
-          methods: ['GET']
-        }
+    const response = await fetch(replaceSubdomain(TRANSLATE_WEBSITE, subdomain), {
+      method: 'GET',
+      headers: {
+        'user-agent': userAgent || config.userAgent
       }
-    )
+    });
 
-    // when fetching for the second time, the subdomain may be unchanged
+    const redirectUrl = response.headers.get('location');
+    const body = await response.text();
+
+    let subdomainMatch;
     if (redirectUrl) {
-      subdomain = redirectUrl.match(/^https?:\/\/(\w+)\.bing\.com/)[1]
+      subdomainMatch = redirectUrl.match(/^https?:\/\/(\w+)\.bing\.com/);
+      if (subdomainMatch) {
+        subdomain = subdomainMatch[1];
+      }
     }
 
-    const IG = body.match(/IG:"([^"]+)"/)[1]
-    const IID = body.match(/data-iid="([^"]+)"/)[1]
+    const IGMatch = body.match(/IG:"([^"]+)"/);
+    const IIDMatch = body.match(/data-iid="([^"]+)"/);
+    const paramsMatch = body.match(/params_AbusePreventionHelper\s?=\s?([^\]]+\])/);
 
-    const [key, token, tokenExpiryInterval] = JSON.parse(
-      body.match(/params_AbusePreventionHelper\s?=\s?([^\]]+\])/)[1]
-    )
+    if (!IGMatch || !IIDMatch || !paramsMatch) {
+      throw new Error('Failed to fetch required fields');
+    }
+
+    const IG = IGMatch[1];
+    const IID = IIDMatch[1];
+    const [key, token, tokenExpiryInterval] = JSON.parse(paramsMatch[1]);
 
     const requiredFields = {
       IG,
@@ -107,23 +110,25 @@ async function fetchGlobalConfig(userAgent, proxyAgents) {
       token,
       tokenTs: key,
       tokenExpiryInterval
-    }
-    // check required fields
+    };
+
+    // Check required fields
     Object.entries(requiredFields).forEach(([field, value]) => {
       if (!value) {
-        throw new Error(`failed to fetch required field: \`${field}\``)
+        throw new Error(`Failed to fetch required field: \`${field}\``);
       }
-    })
+    });
 
-    return globalConfig = {
+    globalConfig = {
       ...requiredFields,
       subdomain,
-      // PENDING: reset count when value is large?
       count: 0
-    }
-  } catch (e) {
-    console.error('failed to fetch global config')
-    throw e
+    };
+
+    return globalConfig;
+  } catch (error) {
+    console.error('Failed to fetch global config');
+    throw error;
   }
 }
 
@@ -239,19 +244,19 @@ async function wrapRequest(request) {
  *
  * @returns {Promise<TranslationResult | undefined>}
  */
-async function translate(text, from, to, correct, raw, userAgent, proxyAgents) {
+async function translate(text, from, to, correct, raw, userAgent) {
   if (!text || !(text = text.trim())) {
     return
   }
 
   if (!globalConfigPromise) {
-    globalConfigPromise = fetchGlobalConfig(userAgent, proxyAgents)
+    globalConfigPromise = fetchGlobalConfig(userAgent)
   }
 
   await globalConfigPromise
 
   if (isTokenExpired()) {
-    globalConfigPromise = fetchGlobalConfig(userAgent, proxyAgents)
+    globalConfigPromise = fetchGlobalConfig(userAgent)
 
     await globalConfigPromise
   }
@@ -270,7 +275,6 @@ async function translate(text, from, to, correct, raw, userAgent, proxyAgents) {
   to = lang.getLangCode(to)
 
   to === 'auto-detect' && (to = 'en')
-
   const canUseEPT = text.length <= config.maxEPTTextLen
     && ([from, to].every(lang => lang === 'auto-detect' || config.eptLangs.includes(lang)))
 
@@ -280,7 +284,7 @@ async function translate(text, from, to, correct, raw, userAgent, proxyAgents) {
     const maxTextLen = globalConfig.subdomain === 'cn'
       ? config.maxTextLenCN
       : config.maxTextLen
-
+    console.log(text)
     if (text.length > maxTextLen) {
       throw new Error(`The supported maximum text length is ${maxTextLen}. Please shorten the text.`)
     }
@@ -303,16 +307,17 @@ async function translate(text, from, to, correct, raw, userAgent, proxyAgents) {
   }
 
   const body = await wrapRequest(
-    got.post(requestURL, {
+    fetch(requestURL, {
       headers: requestHeaders,
       // got will set CONTENT_TYPE as `application/x-www-form-urlencoded`
       form: requestBody,
       responseType: 'json',
-      agent: proxyAgents,
-      retry: canUseEPT ? 0 : retryConfig
+      retry: canUseEPT ? 0 : retryConfig,
+      method: "POST"
     })
   )
 
+  console.log(body)
   const translation = body[0].translations[0]
   const detectedLang = body[0].detectedLanguage || {}
 
@@ -342,11 +347,11 @@ async function translate(text, from, to, correct, raw, userAgent, proxyAgents) {
       const requestBody = makeRequestBody(true, text, correctLang)
 
       const body = await wrapRequest(
-        got.post(requestURL, {
+        fetch(requestURL, {
           headers: requestHeaders,
           form: requestBody,
           responseType: 'json',
-          agent: proxyAgents,
+          method: "POST",
           retry: retryConfig
         })
       )
@@ -370,5 +375,4 @@ module.exports = {
   lang,
   // mount the MET module on the index entry
   // PENDING: isolate bing module and Microsoft module?
-  MET: require('./met')
 }

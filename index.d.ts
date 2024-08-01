@@ -1,9 +1,8 @@
 // AUTO-GENERATED. SEE scripts/index.tpl.d.ts FOR ORIGINAL TYPINGS
 
 import type {
-  Agents,
-  Options as GotOptions
-} from 'got';
+  fetch
+} from 'node-fetch';
 
 export interface TranslationResult {
   /**
@@ -61,8 +60,7 @@ export declare function translate(
   to: string,
   correct?: boolean,
   raw?: boolean,
-  userAgent?: string,
-  proxyAgents?: Agents
+  userAgent?: string
 ): Promise<TranslationResult | undefined>;
 
 export declare namespace lang {
